@@ -5,7 +5,7 @@ import { saveAs } from 'file-saver';
 import QRCode from 'qrcode';
 import logo from './assets/logo.png';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, '');
 
 function App() {
   const [step, setStep] = useState(0); // 0: Upload, 1: Config, 2: Success
