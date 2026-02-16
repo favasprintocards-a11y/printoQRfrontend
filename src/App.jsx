@@ -21,13 +21,17 @@ function App() {
     colorLight: '#ffffff',
     moduleStyle: 'square', // square, dots, rounded
     eyeStyle: 'square', // square, rounded
-    logoSize: 20
+    logoSize: 20,
+    showText: true
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [previews, setPreviews] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [timer, setTimer] = useState(0);
+  const [countdown, setCountdown] = useState(0);
+  const [totalTime, setTotalTime] = useState(0);
 
   // Analyze file when dropped
   const onDrop = useCallback(async (acceptedFiles) => {
@@ -87,21 +91,30 @@ function App() {
           const size = modules.size;
           // We just render as Data URI SVG
           let shapes = '';
+          const fill = config.colorDark;
+          const isFinder = (r, c) => (r < 7 && c < 7) || (r < 7 && c >= size - 7) || (r >= size - 7 && c < 7);
+
+          // Draw Eyes
+          const eyes = [{ r: 0, c: 0 }, { r: 0, c: size - 7 }, { r: size - 7, c: 0 }];
+          for (const eye of eyes) {
+            if (config.eyeStyle === 'rounded') {
+              shapes += `<rect x="${eye.c}" y="${eye.r}" width="7" height="7" rx="1.5" fill="${fill}" />`;
+              shapes += `<rect x="${eye.c + 1}" y="${eye.r + 1}" width="5" height="5" rx="1" fill="${config.colorLight}" />`;
+              shapes += `<rect x="${eye.c + 2}" y="${eye.r + 2}" width="3" height="3" rx="0.5" fill="${fill}" />`;
+            } else {
+              shapes += `<rect x="${eye.c}" y="${eye.r}" width="7" height="7" fill="${fill}" />`;
+              shapes += `<rect x="${eye.c + 1}" y="${eye.r + 1}" width="5" height="5" fill="${config.colorLight}" />`;
+              shapes += `<rect x="${eye.c + 2}" y="${eye.r + 2}" width="3" height="3" fill="${fill}" />`;
+            }
+          }
 
           for (let r = 0; r < size; r++) {
             for (let c = 0; c < size; c++) {
+              if (isFinder(r, c)) continue;
               if (modules.get(r, c)) {
-                // Logic similar to backend
-                const isFinder = (r < 7 && c < 7) || (r < 7 && c >= size - 7) || (r >= size - 7 && c < 7);
-                // Apply Styles
-                const modStyle = isFinder && config.eyeStyle === 'square' ? 'square' : config.moduleStyle;
-
-                // Color
-                const fill = config.colorDark;
-
-                if (modStyle === 'dots') {
+                if (config.moduleStyle === 'dots') {
                   shapes += `<circle cx="${c + 0.5}" cy="${r + 0.5}" r="0.4" fill="${fill}" />`;
-                } else if (modStyle === 'rounded') {
+                } else if (config.moduleStyle === 'rounded') {
                   shapes += `<rect x="${c + 0.1}" y="${r + 0.1}" width="0.8" height="0.8" rx="0.2" fill="${fill}" />`;
                 } else {
                   shapes += `<rect x="${c}" y="${r}" width="1" height="1" fill="${fill}" />`;
@@ -125,10 +138,38 @@ function App() {
     generatePreviews();
   }, [stats, config]);
 
+  // Timer logic
+  useEffect(() => {
+    let interval;
+    if (loading && step === 1) {
+      const start = Date.now();
+      interval = setInterval(() => {
+        setTimer(Math.floor((Date.now() - start) / 1000));
+        setCountdown(prev => Math.max(1, prev - 1));
+      }, 1000);
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [loading, step]);
+
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+  };
+
   const handleGenerate = async () => {
     if (!file) return;
     setLoading(true);
     setError(null);
+    setTimer(0);
+
+    // Estimate: ~40 records per second + 3s buffer
+    const est = Math.ceil(stats.totalRows / 40) + 3;
+    setCountdown(est);
+
+    const startTime = Date.now();
 
     const formData = new FormData();
     formData.append('file', file);
@@ -142,6 +183,7 @@ function App() {
     formData.append('moduleStyle', config.moduleStyle);
     formData.append('eyeStyle', config.eyeStyle);
     formData.append('logoSize', config.logoSize);
+    formData.append('showText', config.showText);
     if (logoFile) {
       formData.append('logo', logoFile);
     }
@@ -157,6 +199,7 @@ function App() {
       const successCount = response.headers['x-success-count'];
       const skippedCount = response.headers['x-skipped-count'];
 
+      setTotalTime(Math.floor((Date.now() - startTime) / 1000));
       setStats(prev => ({ ...prev, successCount, skippedCount }));
       setStep(2);
     } catch (err) {
@@ -173,6 +216,8 @@ function App() {
     setStats(null);
     setPreviews([]);
     setError(null);
+    setTimer(0);
+    setTotalTime(0);
   };
 
   return (
@@ -346,13 +391,28 @@ function App() {
                     <option value={1200}>1200x1200 (Print Ready)</option>
                   </select>
                 </div>
+                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
+                  <input
+                    type="checkbox"
+                    id="showText"
+                    checked={config.showText}
+                    onChange={(e) => setConfig({ ...config, showText: e.target.checked })}
+                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
+                  />
+                  <label htmlFor="showText" style={{ cursor: 'pointer', marginBottom: '0', fontSize: '14px', fontWeight: '500' }}>Show Number below QR</label>
+                </div>
               </div>
             </div>
 
             <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
               <button className="btn" style={{ backgroundColor: '#e2e8f0', color: '#4a5568', flex: 1 }} onClick={handleReset}>Cancel</button>
               <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleGenerate} disabled={loading}>
-                {loading ? <><div className="spinner"></div> Processing...</> : 'Generate Bulk ZIP'}
+                {loading ? (
+                  <>
+                    <div className="spinner"></div>
+                    Processing... Est. {countdown}s left
+                  </>
+                ) : 'Generate Bulk ZIP'}
               </button>
             </div>
           </div>
@@ -393,9 +453,11 @@ function App() {
                       </div>
                     )}
                   </div>
-                  <div style={{ fontSize: '11px', color: '#1a202c', marginTop: '10px', wordBreak: 'break-all' }}>
-                    {p.val}
-                  </div>
+                  {config.showText && (
+                    <div style={{ fontSize: '11px', color: '#1a202c', marginTop: '10px', wordBreak: 'break-all', fontWeight: 'bold' }}>
+                      {p.val}
+                    </div>
+                  )}
                 </div>
               ))}
               {stats.totalRows > 2 && (
@@ -422,6 +484,10 @@ function App() {
               <div className="stat-item">
                 <span className="stat-value" style={{ color: 'var(--error)' }}>{stats?.skippedCount || 0}</span>
                 <span className="stat-label">Skipped</span>
+              </div>
+              <div className="stat-item">
+                <span className="stat-value" style={{ color: 'var(--primary)' }}>{formatTime(totalTime)}</span>
+                <span className="stat-label">Total Time</span>
               </div>
             </div>
             <p style={{ marginBottom: '2rem', color: 'var(--text-light)' }}>
