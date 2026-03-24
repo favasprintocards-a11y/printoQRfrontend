@@ -22,7 +22,8 @@ function App() {
     moduleStyle: 'square', // square, dots, rounded
     eyeStyle: 'square', // square, rounded
     logoSize: 20,
-    showText: true
+    showText: true,
+    textFontSize: 11
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -184,6 +185,7 @@ function App() {
     formData.append('eyeStyle', config.eyeStyle);
     formData.append('logoSize', config.logoSize);
     formData.append('showText', config.showText);
+    formData.append('textFontSize', config.textFontSize);
     if (logoFile) {
       formData.append('logo', logoFile);
     }
@@ -401,6 +403,18 @@ function App() {
                   />
                   <label htmlFor="showText" style={{ cursor: 'pointer', marginBottom: '0', fontSize: '14px', fontWeight: '500' }}>Show Number below QR</label>
                 </div>
+                {config.showText && (
+                  <div className="form-group">
+                    <label>Font Size ({config.textFontSize}px)</label>
+                    <input
+                      type="range"
+                      min="8"
+                      max="30"
+                      value={config.textFontSize}
+                      onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })}
+                    />
+                  </div>
+                )}
               </div>
             </div>
 
@@ -454,7 +468,7 @@ function App() {
                     )}
                   </div>
                   {config.showText && (
-                    <div style={{ fontSize: '11px', color: '#1a202c', marginTop: '10px', wordBreak: 'break-all', fontWeight: 'bold' }}>
+                    <div style={{ fontSize: `${config.textFontSize}px`, color: '#1a202c', marginTop: '10px', wordBreak: 'break-all', fontWeight: 'bold' }}>
                       {p.val}
                     </div>
                   )}
