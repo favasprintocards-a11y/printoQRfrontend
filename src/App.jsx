@@ -33,6 +33,8 @@ function App() {
   const [timer, setTimer] = useState(0);
   const [countdown, setCountdown] = useState(0);
   const [totalTime, setTotalTime] = useState(0);
+  const [analysisTime, setAnalysisTime] = useState(0);
+  const [progress, setProgress] = useState(0);
 
   // Analyze file when dropped
   const onDrop = useCallback(async (acceptedFiles) => {
@@ -42,12 +44,20 @@ function App() {
     setFile(uploadedFile);
     setLoading(true);
     setError(null);
+    setTimer(0);
+
+    // Initial analysis timer
+    const analyzeStart = Date.now();
+    const analyzeInterval = setInterval(() => {
+      setTimer(Math.floor((Date.now() - analyzeStart) / 1000));
+    }, 1000);
 
     const formData = new FormData();
     formData.append('file', uploadedFile);
 
     try {
       const res = await axios.post(`${API_URL}/analyze`, formData);
+      setAnalysisTime(res.data.analysisTime || Math.floor((Date.now() - analyzeStart) / 1000));
       setStats(res.data);
       setStep(1);
     } catch (err) {
@@ -55,6 +65,7 @@ function App() {
       setError('Failed to parse file. Please ensure it is a valid Excel file.');
     } finally {
       setLoading(false);
+      clearInterval(analyzeInterval);
     }
   }, []);
 
@@ -81,31 +92,21 @@ function App() {
         if (!val) continue;
 
         const text = String(val);
-        // We use a simple backend call for the first item to show "True" preview, 
-        // OR we just show colors for now. 
-        // Since user wants to SEE the style, we MUST render it.
-        // Let's implement a simple SVG renderer here similar to backend.
-
         try {
           const qr = QRCode.create(text, { errorCorrectionLevel: config.errorCorrectionLevel });
           const modules = qr.modules;
           const size = modules.size;
-          // We just render as Data URI SVG
           let shapes = '';
           const fill = config.colorDark;
           const isFinder = (r, c) => (r < 7 && c < 7) || (r < 7 && c >= size - 7) || (r >= size - 7 && c < 7);
 
-          // Draw Eyes
           const eyes = [{ r: 0, c: 0 }, { r: 0, c: size - 7 }, { r: size - 7, c: 0 }];
           for (const eye of eyes) {
+            const rect = (r, c, w, h, rx, f) => `<rect x="${c}" y="${r}" width="${w}" height="${h}" ${rx ? `rx="${rx}"` : ''} fill="${f}" />`;
             if (config.eyeStyle === 'rounded') {
-              shapes += `<rect x="${eye.c}" y="${eye.r}" width="7" height="7" rx="1.5" fill="${fill}" />`;
-              shapes += `<rect x="${eye.c + 1}" y="${eye.r + 1}" width="5" height="5" rx="1" fill="${config.colorLight}" />`;
-              shapes += `<rect x="${eye.c + 2}" y="${eye.r + 2}" width="3" height="3" rx="0.5" fill="${fill}" />`;
+              shapes += rect(eye.r, eye.c, 7, 7, 1.5, fill) + rect(eye.r + 1, eye.c + 1, 5, 5, 1, config.colorLight) + rect(eye.r + 2, eye.c + 2, 3, 3, 0.5, fill);
             } else {
-              shapes += `<rect x="${eye.c}" y="${eye.r}" width="7" height="7" fill="${fill}" />`;
-              shapes += `<rect x="${eye.c + 1}" y="${eye.r + 1}" width="5" height="5" fill="${config.colorLight}" />`;
-              shapes += `<rect x="${eye.c + 2}" y="${eye.r + 2}" width="3" height="3" fill="${fill}" />`;
+              shapes += rect(eye.r, eye.c, 7, 7, 0, fill) + rect(eye.r + 1, eye.c + 1, 5, 5, 0, config.colorLight) + rect(eye.r + 2, eye.c + 2, 3, 3, 0, fill);
             }
           }
 
@@ -113,22 +114,16 @@ function App() {
             for (let c = 0; c < size; c++) {
               if (isFinder(r, c)) continue;
               if (modules.get(r, c)) {
-                if (config.moduleStyle === 'dots') {
-                  shapes += `<circle cx="${c + 0.5}" cy="${r + 0.5}" r="0.4" fill="${fill}" />`;
-                } else if (config.moduleStyle === 'rounded') {
-                  shapes += `<rect x="${c + 0.1}" y="${r + 0.1}" width="0.8" height="0.8" rx="0.2" fill="${fill}" />`;
-                } else {
-                  shapes += `<rect x="${c}" y="${r}" width="1" height="1" fill="${fill}" />`;
-                }
+                if (config.moduleStyle === 'dots') shapes += `<circle cx="${c + 0.5}" cy="${r + 0.5}" r="0.4" fill="${fill}" />`;
+                else if (config.moduleStyle === 'rounded') shapes += `<rect x="${c + 0.1}" y="${r + 0.1}" width="0.8" height="0.8" rx="0.2" fill="${fill}" />`;
+                else shapes += `<rect x="${c}" y="${r}" width="1" height="1" fill="${fill}" />`;
               }
             }
           }
 
           const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="150" height="150"><rect width="100%" height="100%" fill="${config.colorLight}"/>${shapes}</svg>`;
           const blob = new Blob([svg], { type: 'image/svg+xml' });
-          const url = URL.createObjectURL(blob);
-
-          newPreviews.push({ val, url });
+          newPreviews.push({ val, url: URL.createObjectURL(blob) });
         } catch (e) {
           console.error(e);
         }
@@ -139,17 +134,22 @@ function App() {
     generatePreviews();
   }, [stats, config]);
 
-  // Timer logic
+  // Combined timer and progress logic
   useEffect(() => {
     let interval;
-    if (loading && step === 1) {
+    if (loading) {
       const start = Date.now();
       interval = setInterval(() => {
         setTimer(Math.floor((Date.now() - start) / 1000));
-        setCountdown(prev => Math.max(1, prev - 1));
+        if (step === 1) {
+          setCountdown(prev => Math.max(1, prev - 1));
+          // Fake progress bar increments if not real
+          setProgress(prev => Math.min(98, prev + (100 / Math.max(20, countdown))));
+        }
       }, 1000);
     } else {
       clearInterval(interval);
+      if (step === 2) setProgress(100);
     }
     return () => clearInterval(interval);
   }, [loading, step]);
@@ -165,9 +165,10 @@ function App() {
     setLoading(true);
     setError(null);
     setTimer(0);
+    setProgress(0);
 
-    // Estimate: ~40 records per second + 3s buffer
-    const est = Math.ceil(stats.totalRows / 40) + 3;
+    // Estimate: ~100 records per second + 2s buffer (Improved from 40)
+    const est = Math.ceil(stats.totalRows / 100) + 2;
     setCountdown(est);
 
     const startTime = Date.now();
@@ -186,15 +187,10 @@ function App() {
     formData.append('logoSize', config.logoSize);
     formData.append('showText', config.showText);
     formData.append('textFontSize', config.textFontSize);
-    if (logoFile) {
-      formData.append('logo', logoFile);
-    }
+    if (logoFile) formData.append('logo', logoFile);
 
     try {
-      const response = await axios.post(`${API_URL}/generate`, formData, {
-        responseType: 'blob'
-      });
-
+      const response = await axios.post(`${API_URL}/generate`, formData, { responseType: 'blob' });
       const blob = new Blob([response.data], { type: 'application/zip' });
       saveAs(blob, `qrcodes_${Date.now()}.zip`);
 
@@ -220,6 +216,7 @@ function App() {
     setError(null);
     setTimer(0);
     setTotalTime(0);
+    setProgress(0);
   };
 
   return (
@@ -235,7 +232,13 @@ function App() {
             <input {...getInputProps()} />
             <div className="icon-upload">📂</div>
             {loading ? (
-              <p>Analyzing file...</p>
+              <div style={{ padding: '1rem' }}>
+                <p style={{ fontWeight: 'bold' }}>Analyzing file... {timer}s</p>
+                <div className="progress-bar" style={{ maxWidth: '300px', margin: '1rem auto' }}>
+                  <div className="progress-fill" style={{ width: '60%' }}></div>
+                </div>
+                <p style={{ fontSize: '12px', color: 'var(--text-light)' }}>Reading rows and headers...</p>
+              </div>
             ) : (
               <p>Drag & drop your Excel file here, or click to select</p>
             )}
@@ -253,23 +256,15 @@ function App() {
               <div className="config-grid">
                 <div className="form-group">
                   <label>Excel Column</label>
-                  <select
-                    value={config.colIndex}
-                    onChange={(e) => setConfig({ ...config, colIndex: Number(e.target.value) })}
-                  >
+                  <select value={config.colIndex} onChange={(e) => setConfig({ ...config, colIndex: Number(e.target.value) })}>
                     {stats.headers && stats.headers.map((h, i) => (
-                      <option key={i} value={i}>
-                        Row {i + 1}: {h || 'Empty'}
-                      </option>
+                      <option key={i} value={i}>Col {i + 1}: {h || 'Empty'}</option>
                     ))}
                   </select>
                 </div>
                 <div className="form-group">
                   <label>Error Correction</label>
-                  <select
-                    value={config.errorCorrectionLevel}
-                    onChange={(e) => setConfig({ ...config, errorCorrectionLevel: e.target.value })}
-                  >
+                  <select value={config.errorCorrectionLevel} onChange={(e) => setConfig({ ...config, errorCorrectionLevel: e.target.value })}>
                     <option value="L">Low (7%)</option>
                     <option value="M">Medium (15%)</option>
                     <option value="Q">Quartile (25%)</option>
@@ -285,10 +280,7 @@ function App() {
               <div className="config-grid">
                 <div className="form-group">
                   <label>Module Pattern</label>
-                  <select
-                    value={config.moduleStyle}
-                    onChange={(e) => setConfig({ ...config, moduleStyle: e.target.value })}
-                  >
+                  <select value={config.moduleStyle} onChange={(e) => setConfig({ ...config, moduleStyle: e.target.value })}>
                     <option value="square">Square</option>
                     <option value="rounded">Rounded Modules</option>
                     <option value="dots">Dots</option>
@@ -296,31 +288,18 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label>Eye Style (Corners)</label>
-                  <select
-                    value={config.eyeStyle}
-                    onChange={(e) => setConfig({ ...config, eyeStyle: e.target.value })}
-                  >
+                  <select value={config.eyeStyle} onChange={(e) => setConfig({ ...config, eyeStyle: e.target.value })}>
                     <option value="square">Square</option>
                     <option value="rounded">Rounded</option>
                   </select>
                 </div>
                 <div className="form-group">
                   <label>Foreground Color</label>
-                  <input
-                    type="color"
-                    value={config.colorDark}
-                    onChange={(e) => setConfig({ ...config, colorDark: e.target.value })}
-                    style={{ width: '100%', height: '40px', padding: '0', cursor: 'pointer' }}
-                  />
+                  <input type="color" value={config.colorDark} onChange={(e) => setConfig({ ...config, colorDark: e.target.value })} style={{ width: '100%', height: '40px', padding: '0', cursor: 'pointer' }} />
                 </div>
                 <div className="form-group">
                   <label>Background Color</label>
-                  <input
-                    type="color"
-                    value={config.colorLight}
-                    onChange={(e) => setConfig({ ...config, colorLight: e.target.value })}
-                    style={{ width: '100%', height: '40px', padding: '0', cursor: 'pointer' }}
-                  />
+                  <input type="color" value={config.colorLight} onChange={(e) => setConfig({ ...config, colorLight: e.target.value })} style={{ width: '100%', height: '40px', padding: '0', cursor: 'pointer' }} />
                 </div>
               </div>
             </div>
@@ -331,39 +310,20 @@ function App() {
               <div className="config-grid">
                 <div className="form-group">
                   <label>Upload Center Logo</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={(e) => {
-                      const f = e.target.files[0];
-                      if (f) {
-                        setLogoFile(f);
-                        setLogoPreview(URL.createObjectURL(f));
-                      }
-                    }}
-                  />
+                  <input type="file" accept="image/*" onChange={(e) => {
+                    const f = e.target.files[0];
+                    if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); }
+                  }} />
                 </div>
                 <div className="form-group">
-                  <label>Logo Size (% of QR)</label>
-                  <input
-                    type="range"
-                    min="10"
-                    max="30"
-                    value={config.logoSize}
-                    onChange={(e) => setConfig({ ...config, logoSize: Number(e.target.value) })}
-                  />
-                  <div style={{ fontSize: '12px', textAlign: 'right' }}>{config.logoSize}%</div>
+                  <label>Logo Size ({config.logoSize}% of QR)</label>
+                  <input type="range" min="10" max="30" value={config.logoSize} onChange={(e) => setConfig({ ...config, logoSize: Number(e.target.value) })} />
                 </div>
               </div>
               {logoPreview && (
                 <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <img src={logoPreview} alt="Logo Preview" style={{ width: '40px', height: '40px', borderRadius: '4px', border: '1px solid var(--primary)' }} />
-                  <button
-                    onClick={() => { setLogoFile(null); setLogoPreview(null); }}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px' }}
-                  >
-                    Remove Logo
-                  </button>
+                  <button onClick={() => { setLogoFile(null); setLogoPreview(null); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '12px' }}>Remove Logo</button>
                 </div>
               )}
             </div>
@@ -374,45 +334,27 @@ function App() {
               <div className="config-grid">
                 <div className="form-group">
                   <label>File Format</label>
-                  <select
-                    value={config.format}
-                    onChange={(e) => setConfig({ ...config, format: e.target.value })}
-                  >
+                  <select value={config.format} onChange={(e) => setConfig({ ...config, format: e.target.value })}>
                     <option value="png">PNG (Recommended)</option>
                     <option value="jpeg">JPEG</option>
                   </select>
                 </div>
                 <div className="form-group">
                   <label>Resolution (px)</label>
-                  <select
-                    value={config.width}
-                    onChange={(e) => setConfig({ ...config, width: Number(e.target.value) })}
-                  >
+                  <select value={config.width} onChange={(e) => setConfig({ ...config, width: Number(e.target.value) })}>
                     <option value={300}>300x300 (Standard)</option>
                     <option value={600}>600x600 (High Res)</option>
                     <option value={1200}>1200x1200 (Print Ready)</option>
                   </select>
                 </div>
                 <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
-                  <input
-                    type="checkbox"
-                    id="showText"
-                    checked={config.showText}
-                    onChange={(e) => setConfig({ ...config, showText: e.target.checked })}
-                    style={{ width: '20px', height: '20px', cursor: 'pointer' }}
-                  />
+                  <input type="checkbox" id="showText" checked={config.showText} onChange={(e) => setConfig({ ...config, showText: e.target.checked })} style={{ width: '20px', height: '20px', cursor: 'pointer' }} />
                   <label htmlFor="showText" style={{ cursor: 'pointer', marginBottom: '0', fontSize: '14px', fontWeight: '500' }}>Show Number below QR</label>
                 </div>
                 {config.showText && (
                   <div className="form-group">
                     <label>Font Size ({config.textFontSize}px)</label>
-                    <input
-                      type="range"
-                      min="8"
-                      max="30"
-                      value={config.textFontSize}
-                      onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })}
-                    />
+                    <input type="range" min="8" max="30" value={config.textFontSize} onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })} />
                   </div>
                 )}
               </div>
@@ -422,98 +364,83 @@ function App() {
               <button className="btn" style={{ backgroundColor: '#e2e8f0', color: '#4a5568', flex: 1 }} onClick={handleReset}>Cancel</button>
               <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleGenerate} disabled={loading}>
                 {loading ? (
-                  <>
-                    <div className="spinner"></div>
-                    Processing... Est. {countdown}s left
-                  </>
+                  <div style={{ width: '100%' }}>
+                    <div style={{ marginBottom: '5px' }}>Processing... {progress.toFixed(0)}%</div>
+                    <div className="progress-bar" style={{ height: '4px', background: 'rgba(255,255,255,0.3)' }}>
+                      <div className="progress-fill" style={{ width: `${progress}%`, background: '#fff' }}></div>
+                    </div>
+                  </div>
                 ) : 'Generate Bulk ZIP'}
               </button>
             </div>
+            {loading && (
+              <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-light)', marginTop: '10px' }}>
+                Est. {countdown}s remaining. Do not close this tab.
+              </p>
+            )}
           </div>
 
           {/* Right Column: Previews & Status */}
-          <div className="config-sidebar" style={{ position: 'sticky', top: '2rem' }}>
-            <div className="stats-card" style={{ marginBottom: '1.5rem' }}>
+          <div className="config-sidebar">
+            <div className="stats-card">
               <div className="stat-item">
                 <span className="stat-value">{stats.totalRows}</span>
                 <span className="stat-label">Records</span>
               </div>
+              <div className="stat-item">
+                <span className="stat-value">{analysisTime > 10 ? `${analysisTime}ms` : '<10ms'}</span>
+                <span className="stat-label">Analysis</span>
+              </div>
             </div>
 
-            <h3 style={{ marginBottom: '1rem', fontSize: '14px', color: 'var(--text-light)' }}>
-              LIVE PREVIEW (Sample)
-            </h3>
-            <div className="preview-list" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <h3 style={{ marginBottom: '1rem', fontSize: '14px', color: 'var(--text-light)' }}>LIVE PREVIEW (Sample)</h3>
+            <div className="preview-list">
               {previews.slice(0, 2).map((p, i) => (
-                <div key={i} className="preview-card" style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', border: '1px solid #e2e8f0', textAlign: 'center' }}>
+                <div key={i} className="preview-card">
                   <div style={{ position: 'relative', display: 'inline-block' }}>
                     <img src={p.url} alt="Preview" style={{ width: '180px', height: '180px' }} />
                     {logoPreview && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '50%',
-                        left: '50%',
-                        transform: 'translate(-50%, -50%)',
-                        width: `${config.logoSize}%`,
-                        height: `${config.logoSize}%`,
-                        background: 'white',
-                        padding: '2px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: '2px'
-                      }}>
+                      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: `${config.logoSize}%`, height: `${config.logoSize}%`, background: 'white', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '2px' }}>
                         <img src={logoPreview} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                       </div>
                     )}
                   </div>
                   {config.showText && (
-                    <div style={{ fontSize: `${config.textFontSize}px`, color: '#1a202c', marginTop: '10px', wordBreak: 'break-all', fontWeight: 'bold' }}>
-                      {p.val}
-                    </div>
+                    <div style={{ fontSize: `${config.textFontSize}px`, color: '#1a202c', marginTop: '10px', wordBreak: 'break-all', fontWeight: 'bold' }}>{p.val}</div>
                   )}
                 </div>
               ))}
               {stats.totalRows > 2 && (
-                <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-light)' }}>
-                  + {stats.totalRows - 2} more will be generated
-                </div>
+                <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-light)' }}>+ {stats.totalRows - 2} more to be generated</div>
               )}
             </div>
           </div>
         </div>
-      )
-      }
+      )}
 
-      {
-        step === 2 && (
-          <div className="success-section animation-fade" style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>✅</div>
-            <h2>Processing Complete!</h2>
-            <div className="stats-card" style={{ marginTop: '2rem' }}>
-              <div className="stat-item">
-                <span className="stat-value" style={{ color: 'var(--success)' }}>{stats?.successCount || 0}</span>
-                <span className="stat-label">Generated</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-value" style={{ color: 'var(--error)' }}>{stats?.skippedCount || 0}</span>
-                <span className="stat-label">Skipped</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-value" style={{ color: 'var(--primary)' }}>{formatTime(totalTime)}</span>
-                <span className="stat-label">Total Time</span>
-              </div>
+      {step === 2 && (
+        <div className="success-section animation-fade" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '4rem', marginBottom: '1rem' }}>✅</div>
+          <h2>Processing Complete!</h2>
+          <div className="stats-card" style={{ marginTop: '2rem' }}>
+            <div className="stat-item">
+              <span className="stat-value" style={{ color: 'var(--success)' }}>{stats?.successCount || 0}</span>
+              <span className="stat-label">Generated</span>
             </div>
-            <p style={{ marginBottom: '2rem', color: 'var(--text-light)' }}>
-              Your ZIP file download should have started automatically.
-            </p>
-            <button className="btn btn-primary" onClick={handleReset}>
-              Process Another File
-            </button>
+            <div className="stat-item">
+              <span className="stat-value" style={{ color: 'var(--error)' }}>{stats?.skippedCount || 0}</span>
+              <span className="stat-label">Skipped</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value" style={{ color: 'var(--primary)' }}>{formatTime(totalTime)}</span>
+              <span className="stat-label">Generation Time</span>
+            </div>
           </div>
-        )
-      }
-    </div >
+          <p style={{ marginBottom: '2rem', color: 'var(--text-light)' }}>Your ZIP file download should have started automatically.</p>
+          <button className="btn btn-primary" onClick={handleReset}>Process Another File</button>
+        </div>
+      )}
+    </div>
   );
 }
 
