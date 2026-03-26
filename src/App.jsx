@@ -14,16 +14,16 @@ function App() {
   const [config, setConfig] = useState({
     width: 300,
     margin: 4,
-    errorCorrectionLevel: 'H', // Default to high if we use logos
+    errorCorrectionLevel: 'H',
     colIndex: 0,
     format: 'png',
     colorDark: '#000000',
     colorLight: '#ffffff',
-    moduleStyle: 'square', // square, dots, rounded
-    eyeStyle: 'square', // square, rounded
+    moduleStyle: 'square',
+    eyeStyle: 'square',
     logoSize: 20,
     showText: true,
-    textFontSize: 11
+    textFontSize: 16 // Matching server default better
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -78,15 +78,19 @@ function App() {
     multiple: false
   });
 
-  // Generate local previews when stats or config changes
+  // Generate local previews when stats or relevant config changes
   useEffect(() => {
     if (!stats || !stats.preview) return;
+
+    let active = true;
+    const currentPreviews = [];
 
     const generatePreviews = async () => {
       const newPreviews = [];
       const items = stats.preview.slice(0, 6);
 
       for (const row of items) {
+        if (!active) break;
         if (!row) continue;
         const val = row[config.colIndex];
         if (!val) continue;
@@ -94,17 +98,20 @@ function App() {
         const text = String(val);
         try {
           const qr = QRCode.create(text, { errorCorrectionLevel: config.errorCorrectionLevel });
-          const modules = qr.modules;
+          const { modules } = qr;
           const size = modules.size;
+          const margin = Number(config.margin);
+          const totalSize = size + (2 * margin);
+          
           let shapes = '';
           const fill = config.colorDark;
           const isFinder = (r, c) => (r < 7 && c < 7) || (r < 7 && c >= size - 7) || (r >= size - 7 && c < 7);
 
           const eyes = [{ r: 0, c: 0 }, { r: 0, c: size - 7 }, { r: size - 7, c: 0 }];
           for (const eye of eyes) {
-            const rect = (r, c, w, h, rx, f) => `<rect x="${c}" y="${r}" width="${w}" height="${h}" ${rx ? `rx="${rx}"` : ''} fill="${f}" />`;
+            const rect = (r, c, w, h, rx, f) => `<rect x="${c+margin}" y="${r+margin}" width="${w}" height="${h}" ${rx ? `rx="${rx}"` : ''} fill="${f}" />`;
             if (config.eyeStyle === 'rounded') {
-              shapes += rect(eye.r, eye.c, 7, 7, 1.5, fill) + rect(eye.r + 1, eye.c + 1, 5, 5, 1, config.colorLight) + rect(eye.r + 2, eye.c + 2, 3, 3, 0.5, fill);
+              shapes += rect(eye.r, eye.c, 7, 7, 1.5, fill) + rect(eye.r + 1, eye.c + 1, 5, 5, config.colorLight) + rect(eye.r + 2, eye.c + 2, 3, 3, 0.5, fill);
             } else {
               shapes += rect(eye.r, eye.c, 7, 7, 0, fill) + rect(eye.r + 1, eye.c + 1, 5, 5, 0, config.colorLight) + rect(eye.r + 2, eye.c + 2, 3, 3, 0, fill);
             }
@@ -114,25 +121,56 @@ function App() {
             for (let c = 0; c < size; c++) {
               if (isFinder(r, c)) continue;
               if (modules.get(r, c)) {
-                if (config.moduleStyle === 'dots') shapes += `<circle cx="${c + 0.5}" cy="${r + 0.5}" r="0.4" fill="${fill}" />`;
-                else if (config.moduleStyle === 'rounded') shapes += `<rect x="${c + 0.1}" y="${r + 0.1}" width="0.8" height="0.8" rx="0.2" fill="${fill}" />`;
-                else shapes += `<rect x="${c}" y="${r}" width="1" height="1" fill="${fill}" />`;
+                if (config.moduleStyle === 'dots') shapes += `<circle cx="${c + margin + 0.5}" cy="${r + margin + 0.5}" r="0.4" fill="${fill}" />`;
+                else if (config.moduleStyle === 'rounded') shapes += `<rect x="${c + margin + 0.1}" y="${r + margin + 0.1}" width="0.8" height="0.8" rx="0.2" fill="${fill}" />`;
+                else shapes += `<rect x="${c + margin}" y="${r + margin}" width="1" height="1" fill="${fill}" />`;
               }
             }
           }
 
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" width="150" height="150"><rect width="100%" height="100%" fill="${config.colorLight}"/>${shapes}</svg>`;
+          const qrWidth = config.width || 300;
+          const fontSize = config.textFontSize || 16;
+          const unitRatio = totalSize / qrWidth;
+          const textHeight = Math.max(Math.floor(qrWidth * 0.15), Math.floor(fontSize * 2.5));
+          const textHeightUnits = textHeight * unitRatio;
+          const totalHeightUnits = config.showText ? totalSize + textHeightUnits : totalSize;
+          
+          let extraElements = '';
+          if (logoPreview) {
+            const lSizeUnits = (config.logoSize / 100) * size;
+            const lPos = margin + (size - lSizeUnits) / 2;
+            extraElements += `<rect x="${lPos - 0.2}" y="${lPos - 0.2}" width="${lSizeUnits + 0.4}" height="${lSizeUnits + 0.4}" fill="${config.colorLight}" />`;
+            extraElements += `<image x="${lPos}" y="${lPos}" width="${lSizeUnits}" height="${lSizeUnits}" href="${logoPreview}" />`;
+          }
+
+          if (config.showText) {
+            const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const textYUnits = totalSize + (textHeightUnits / 2);
+            const fontSizeUnits = fontSize * unitRatio;
+            extraElements += `<text x="${totalSize / 2}" y="${textYUnits}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSizeUnits}" fill="${config.colorDark}" text-anchor="middle" dominant-baseline="middle" font-weight="bold">${escaped}</text>`;
+          }
+
+          const previewWidth = 180;
+          const previewHeight = config.showText ? previewWidth * (totalHeightUnits / totalSize) : previewWidth;
+
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalHeightUnits}" width="${previewWidth}" height="${previewHeight}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="${config.colorLight}"/>${shapes}${extraElements}</svg>`;
           const blob = new Blob([svg], { type: 'image/svg+xml' });
-          newPreviews.push({ val, url: URL.createObjectURL(blob) });
+          const url = URL.createObjectURL(blob);
+          newPreviews.push({ val, url });
+          currentPreviews.push(url);
         } catch (e) {
           console.error(e);
         }
       }
-      setPreviews(newPreviews);
+      if (active) setPreviews(newPreviews);
     };
 
     generatePreviews();
-  }, [stats, config]);
+    return () => {
+      active = false;
+      currentPreviews.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [stats, config, logoPreview]);
 
   // Combined timer and progress logic
   useEffect(() => {
@@ -354,7 +392,7 @@ function App() {
                 {config.showText && (
                   <div className="form-group">
                     <label>Font Size ({config.textFontSize}px)</label>
-                    <input type="range" min="8" max="30" value={config.textFontSize} onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })} />
+                    <input type="range" min="8" max="60" value={config.textFontSize} onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })} />
                   </div>
                 )}
               </div>
@@ -397,17 +435,7 @@ function App() {
             <div className="preview-list">
               {previews.slice(0, 2).map((p, i) => (
                 <div key={i} className="preview-card">
-                  <div style={{ position: 'relative', display: 'inline-block' }}>
-                    <img src={p.url} alt="Preview" style={{ width: '180px', height: '180px' }} />
-                    {logoPreview && (
-                      <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: `${config.logoSize}%`, height: `${config.logoSize}%`, background: 'white', padding: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '2px' }}>
-                        <img src={logoPreview} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                      </div>
-                    )}
-                  </div>
-                  {config.showText && (
-                    <div style={{ fontSize: `${config.textFontSize}px`, color: '#1a202c', marginTop: '10px', wordBreak: 'break-all', fontWeight: 'bold' }}>{p.val}</div>
-                  )}
+                  <img src={p.url} alt="Preview" style={{ width: '100%', height: 'auto', display: 'block' }} />
                 </div>
               ))}
               {stats.totalRows > 2 && (
