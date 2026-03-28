@@ -112,11 +112,12 @@ function App() {
 
           const eyes = [{ r: 0, c: 0 }, { r: 0, c: size - 7 }, { r: size - 7, c: 0 }];
           for (const eye of eyes) {
-            const rect = (r, c, w, h, rx, f) => `<rect x="${c+margin}" y="${r+margin}" width="${w}" height="${h}" ${rx ? `rx="${rx}"` : ''} fill="${f}" />`;
             if (config.eyeStyle === 'rounded') {
-              shapes += rect(eye.r, eye.c, 7, 7, 1.5, fill) + rect(eye.r + 1, eye.c + 1, 5, 5, config.colorLight) + rect(eye.r + 2, eye.c + 2, 3, 3, 0.5, fill);
+              shapes += `<rect x="${eye.c + margin + 0.5}" y="${eye.r + margin + 0.5}" width="6" height="6" rx="1.5" fill="none" stroke="${fill}" stroke-width="1" />`;
+              shapes += `<rect x="${eye.c + margin + 2}" y="${eye.r + margin + 2}" width="3" height="3" rx="0.5" fill="${fill}" />`;
             } else {
-              shapes += rect(eye.r, eye.c, 7, 7, 0, fill) + rect(eye.r + 1, eye.c + 1, 5, 5, 0, config.colorLight) + rect(eye.r + 2, eye.c + 2, 3, 3, 0, fill);
+              shapes += `<rect x="${eye.c + margin + 0.5}" y="${eye.r + margin + 0.5}" width="6" height="6" fill="none" stroke="${fill}" stroke-width="1" />`;
+              shapes += `<rect x="${eye.c + margin + 2}" y="${eye.r + margin + 2}" width="3" height="3" fill="${fill}" />`;
             }
           }
 
