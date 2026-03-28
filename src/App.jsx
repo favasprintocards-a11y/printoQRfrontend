@@ -26,7 +26,7 @@ function App() {
     textFontSize: 16, // Matching server default better
     textAlign: 'center',
     textSpace: 0,
-    transparentBg: false
+    transparentBg: true
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
