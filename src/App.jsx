@@ -23,7 +23,9 @@ function App() {
     eyeStyle: 'square',
     logoSize: 20,
     showText: true,
-    textFontSize: 16 // Matching server default better
+    textFontSize: 16, // Matching server default better
+    textAlign: 'center',
+    textSpace: 0
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -132,7 +134,9 @@ function App() {
           const fontSize = config.textFontSize || 16;
           const unitRatio = totalSize / qrWidth;
           const textHeight = Math.max(Math.floor(qrWidth * 0.15), Math.floor(fontSize * 2.5));
-          const textHeightUnits = textHeight * unitRatio;
+          const textSpaceInt = Number(config.textSpace || 0);
+          const textSpaceUnits = textSpaceInt * unitRatio;
+          const textHeightUnits = (textHeight * unitRatio) + textSpaceUnits;
           const totalHeightUnits = config.showText ? totalSize + textHeightUnits : totalSize;
           
           let extraElements = '';
@@ -145,9 +149,20 @@ function App() {
 
           if (config.showText) {
             const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            const textYUnits = totalSize + (textHeightUnits / 2);
+            const textYUnits = totalSize + textSpaceUnits + ((textHeightUnits - textSpaceUnits) / 2);
             const fontSizeUnits = fontSize * unitRatio;
-            extraElements += `<text x="${totalSize / 2}" y="${textYUnits}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSizeUnits}" fill="${config.colorDark}" text-anchor="middle" dominant-baseline="middle" font-weight="bold">${escaped}</text>`;
+            
+            let textAnchor = "middle";
+            let textX = totalSize / 2;
+            if (config.textAlign === 'left') {
+               textAnchor = "start";
+               textX = margin;
+            } else if (config.textAlign === 'right') {
+               textAnchor = "end";
+               textX = totalSize - margin;
+            }
+            
+            extraElements += `<text x="${textX}" y="${textYUnits}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSizeUnits}" fill="${config.colorDark}" text-anchor="${textAnchor}" dominant-baseline="middle" font-weight="bold">${escaped}</text>`;
           }
 
           const previewWidth = 180;
@@ -225,6 +240,8 @@ function App() {
     formData.append('logoSize', config.logoSize);
     formData.append('showText', config.showText);
     formData.append('textFontSize', config.textFontSize);
+    formData.append('textAlign', config.textAlign || 'center');
+    formData.append('textSpace', config.textSpace || 0);
     if (logoFile) formData.append('logo', logoFile);
 
     try {
@@ -390,10 +407,24 @@ function App() {
                   <label htmlFor="showText" style={{ cursor: 'pointer', marginBottom: '0', fontSize: '14px', fontWeight: '500' }}>Show Number below QR</label>
                 </div>
                 {config.showText && (
-                  <div className="form-group">
-                    <label>Font Size ({config.textFontSize}px)</label>
-                    <input type="range" min="8" max="60" value={config.textFontSize} onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })} />
-                  </div>
+                  <>
+                    <div className="form-group">
+                      <label>Font Size ({config.textFontSize}px)</label>
+                      <input type="range" min="8" max="60" value={config.textFontSize} onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Text Spacing ({config.textSpace || 0}px)</label>
+                      <input type="range" min="0" max="100" value={config.textSpace || 0} onChange={(e) => setConfig({ ...config, textSpace: Number(e.target.value) })} />
+                    </div>
+                    <div className="form-group">
+                      <label>Text Alignment</label>
+                      <select value={config.textAlign || 'center'} onChange={(e) => setConfig({ ...config, textAlign: e.target.value })}>
+                        <option value="left">Left</option>
+                        <option value="center">Center</option>
+                        <option value="right">Right</option>
+                      </select>
+                    </div>
+                  </>
                 )}
               </div>
             </div>
