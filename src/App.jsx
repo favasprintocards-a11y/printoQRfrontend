@@ -165,14 +165,45 @@ function App() {
             extraElements += `<text x="${textX}" y="${textYUnits}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSizeUnits}" fill="${config.colorDark}" text-anchor="${textAnchor}" dominant-baseline="middle" font-weight="bold">${escaped}</text>`;
           }
 
+          const userDefinedHeight = config.showText ? qrWidth + textHeight + textSpaceInt : qrWidth;
           const previewWidth = 180;
-          const previewHeight = config.showText ? previewWidth * (totalHeightUnits / totalSize) : previewWidth;
+          const previewHeight = previewWidth * (userDefinedHeight / qrWidth);
 
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalHeightUnits}" width="${previewWidth}" height="${previewHeight}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="${config.colorLight}"/>${shapes}${extraElements}</svg>`;
-          const blob = new Blob([svg], { type: 'image/svg+xml' });
-          const url = URL.createObjectURL(blob);
-          newPreviews.push({ val, url });
-          currentPreviews.push(url);
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalHeightUnits}" width="${qrWidth}" height="${userDefinedHeight}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="${config.colorLight}"/>${shapes}${extraElements}</svg>`;
+          
+          await new Promise((resolve) => {
+            const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+            const svgUrl = URL.createObjectURL(svgBlob);
+            const img = new Image();
+            
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              canvas.width = qrWidth;
+              canvas.height = userDefinedHeight;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0);
+              
+              try {
+                const dataUrl = canvas.toDataURL(`image/${config.format === 'png' ? 'png' : 'jpeg'}`);
+                newPreviews.push({ val, url: dataUrl });
+                currentPreviews.push(dataUrl);
+                URL.revokeObjectURL(svgUrl);
+              } catch (err) {
+                // Fallback if canvas is tainted by external logo
+                newPreviews.push({ val, url: svgUrl });
+                currentPreviews.push(svgUrl);
+              }
+              resolve();
+            };
+            
+            img.onerror = () => {
+              newPreviews.push({ val, url: svgUrl });
+              currentPreviews.push(svgUrl);
+              resolve();
+            };
+            
+            img.src = svgUrl;
+          });
         } catch (e) {
           console.error(e);
         }
@@ -367,7 +398,12 @@ function App() {
                   <label>Upload Center Logo</label>
                   <input type="file" accept="image/*" onChange={(e) => {
                     const f = e.target.files[0];
-                    if (f) { setLogoFile(f); setLogoPreview(URL.createObjectURL(f)); }
+                    if (f) { 
+                      setLogoFile(f); 
+                      const reader = new FileReader();
+                      reader.onload = (event) => setLogoPreview(event.target.result);
+                      reader.readAsDataURL(f);
+                    }
                   }} />
                 </div>
                 <div className="form-group">
