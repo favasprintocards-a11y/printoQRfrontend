@@ -25,7 +25,8 @@ function App() {
     showText: true,
     textFontSize: 16, // Matching server default better
     textAlign: 'center',
-    textSpace: 0
+    textSpace: 0,
+    transparentBg: false
   });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
@@ -169,7 +170,8 @@ function App() {
           const previewWidth = 180;
           const previewHeight = previewWidth * (userDefinedHeight / qrWidth);
 
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalHeightUnits}" width="${qrWidth}" height="${userDefinedHeight}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="${config.colorLight}"/>${shapes}${extraElements}</svg>`;
+          const bgFill = config.transparentBg ? 'transparent' : config.colorLight;
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalHeightUnits}" width="${qrWidth}" height="${userDefinedHeight}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="${bgFill}"/>${shapes}${extraElements}</svg>`;
           
           await new Promise((resolve) => {
             const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
@@ -265,7 +267,7 @@ function App() {
     formData.append('colIndex', config.colIndex);
     formData.append('format', config.format);
     formData.append('colorDark', config.colorDark);
-    formData.append('colorLight', config.colorLight);
+    formData.append('colorLight', config.transparentBg ? 'transparent' : config.colorLight);
     formData.append('moduleStyle', config.moduleStyle);
     formData.append('eyeStyle', config.eyeStyle);
     formData.append('logoSize', config.logoSize);
@@ -385,7 +387,12 @@ function App() {
                 </div>
                 <div className="form-group">
                   <label>Background Color</label>
-                  <input type="color" value={config.colorLight} onChange={(e) => setConfig({ ...config, colorLight: e.target.value })} style={{ width: '100%', height: '40px', padding: '0', cursor: 'pointer' }} />
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <input type="color" value={config.colorLight} disabled={config.transparentBg} onChange={(e) => setConfig({ ...config, colorLight: e.target.value })} style={{ width: '100%', height: '40px', padding: '0', cursor: config.transparentBg ? 'not-allowed' : 'pointer', opacity: config.transparentBg ? 0.5 : 1 }} />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '5px', marginBottom: 0, whiteSpace: 'nowrap', fontSize: '13px', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={config.transparentBg || false} onChange={(e) => setConfig({ ...config, transparentBg: e.target.checked })} /> Transparent
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
