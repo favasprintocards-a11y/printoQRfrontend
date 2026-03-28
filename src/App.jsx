@@ -13,7 +13,7 @@ function App() {
   const [stats, setStats] = useState(null);
   const [config, setConfig] = useState({
     width: 300,
-    margin: 4,
+    margin: 2,
     errorCorrectionLevel: 'H',
     colIndex: 0,
     format: 'png',
@@ -429,6 +429,10 @@ function App() {
                   ) : (
                     <input type="color" value={config.colorLight} onChange={(e) => setConfig({ ...config, colorLight: e.target.value })} style={{ width: '100%', height: '40px', padding: '0', cursor: 'pointer' }} />
                   )}
+                </div>
+                <div className="form-group">
+                  <label>Margin / Quiet Zone ({config.margin} blocks)</label>
+                  <input type="range" min="0" max="10" value={config.margin} onChange={(e) => setConfig({ ...config, margin: Number(e.target.value) })} />
                 </div>
               </div>
             </div>
