@@ -24,10 +24,12 @@ function App() {
     logoSize: 20,
     showText: true,
     textFontSize: 16, // Matching server default better
-    textAlign: 'center',
+    textX: 0,
     textSpace: 0,
     transparentBg: true
   });
+  
+  const [dragState, setDragState] = useState({ isDragging: false, startX: 0, startY: 0, initX: 0, initY: 0 });
   const [logoFile, setLogoFile] = useState(null);
   const [logoPreview, setLogoPreview] = useState(null);
   const [previews, setPreviews] = useState([]);
@@ -80,6 +82,46 @@ function App() {
     },
     multiple: false
   });
+
+  // Drag and Drop text positioning logic
+  const handleMouseDownPreview = (e) => {
+    e.preventDefault();
+    setDragState({
+      isDragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      initX: config.textX || 0,
+      initY: config.textSpace || 0
+    });
+  };
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!dragState.isDragging) return;
+      // Calculate delta. Reduce sensitivity slightly for better control
+      const dx = (e.clientX - dragState.startX) * 0.8; 
+      const dy = (e.clientY - dragState.startY) * 0.8;
+      
+      setConfig(prev => ({
+        ...prev,
+        textX: Math.max(-200, Math.min(200, Math.round(dragState.initX + dx))),
+        textSpace: Math.max(-50, Math.min(200, Math.round(dragState.initY + dy)))
+      }));
+    };
+
+    const handleMouseUp = () => {
+      if (dragState.isDragging) setDragState(prev => ({ ...prev, isDragging: false }));
+    };
+
+    if (dragState.isDragging) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [dragState]);
 
   // Generate local previews when stats or relevant config changes
   useEffect(() => {
@@ -151,20 +193,12 @@ function App() {
 
           if (config.showText) {
             const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            const textYUnits = totalSize + textSpaceUnits + ((textHeightUnits - textSpaceUnits) / 2);
+            const textYUnits = totalSize + textSpaceUnits + ((textHeightUnits - Math.max(0, textSpaceUnits)) / 2);
             const fontSizeUnits = fontSize * unitRatio;
             
-            let textAnchor = "middle";
-            let textX = totalSize / 2;
-            if (config.textAlign === 'left') {
-               textAnchor = "start";
-               textX = margin;
-            } else if (config.textAlign === 'right') {
-               textAnchor = "end";
-               textX = totalSize - margin;
-            }
+            const textXPos = (totalSize / 2) + ((config.textX || 0) * unitRatio);
             
-            extraElements += `<text x="${textX}" y="${textYUnits}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSizeUnits}" fill="${config.colorDark}" text-anchor="${textAnchor}" dominant-baseline="middle" font-weight="bold">${escaped}</text>`;
+            extraElements += `<text x="${textXPos}" y="${textYUnits}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSizeUnits}" fill="${config.colorDark}" text-anchor="middle" dominant-baseline="middle" font-weight="bold">${escaped}</text>`;
           }
 
           const userDefinedHeight = config.showText ? qrWidth + textHeight + textSpaceInt : qrWidth;
@@ -274,7 +308,7 @@ function App() {
     formData.append('logoSize', config.logoSize);
     formData.append('showText', config.showText);
     formData.append('textFontSize', config.textFontSize);
-    formData.append('textAlign', config.textAlign || 'center');
+    formData.append('textX', config.textX || 0);
     formData.append('textSpace', config.textSpace || 0);
     if (logoFile) formData.append('logo', logoFile);
 
@@ -458,16 +492,12 @@ function App() {
                       <input type="range" min="8" max="60" value={config.textFontSize} onChange={(e) => setConfig({ ...config, textFontSize: Number(e.target.value) })} />
                     </div>
                     <div className="form-group">
-                      <label>Text Spacing ({config.textSpace || 0}px)</label>
-                      <input type="range" min="0" max="100" value={config.textSpace || 0} onChange={(e) => setConfig({ ...config, textSpace: Number(e.target.value) })} />
+                      <label>Text Spacing/Y-Offset ({config.textSpace || 0}px)</label>
+                      <input type="range" min="-50" max="200" value={config.textSpace || 0} onChange={(e) => setConfig({ ...config, textSpace: Number(e.target.value) })} />
                     </div>
                     <div className="form-group">
-                      <label>Text Alignment</label>
-                      <select value={config.textAlign || 'center'} onChange={(e) => setConfig({ ...config, textAlign: e.target.value })}>
-                        <option value="left">Left</option>
-                        <option value="center">Center</option>
-                        <option value="right">Right</option>
-                      </select>
+                      <label>Text Align/X-Offset ({config.textX || 0}px)</label>
+                      <input type="range" min="-200" max="200" value={config.textX || 0} onChange={(e) => setConfig({ ...config, textX: Number(e.target.value) })} />
                     </div>
                   </>
                 )}
@@ -510,8 +540,26 @@ function App() {
             <h3 style={{ marginBottom: '1rem', fontSize: '14px', color: 'var(--text-light)' }}>LIVE PREVIEW (Sample)</h3>
             <div className="preview-list">
               {previews.slice(0, 2).map((p, i) => (
-                <div key={i} className="preview-card">
-                  <img src={p.url} alt="Preview" style={{ width: '100%', height: 'auto', display: 'block' }} />
+                <div key={i} className="preview-card" style={{ position: 'relative' }}>
+                  <img 
+                    src={p.url} 
+                    alt="Preview" 
+                    onMouseDown={handleMouseDownPreview}
+                    style={{ 
+                      width: '100%', 
+                      height: 'auto', 
+                      display: 'block', 
+                      cursor: dragState.isDragging ? 'grabbing' : (config.showText ? 'grab' : 'default'),
+                      userSelect: 'none',
+                      WebkitUserDrag: 'none'
+                    }} 
+                    draggable="false"
+                  />
+                  {config.showText && !dragState.isDragging && (
+                    <div style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.5)', color: 'white', fontSize: '10px', padding: '2px 6px', borderRadius: '4px', pointerEvents: 'none' }}>
+                      Drag to move text
+                    </div>
+                  )}
                 </div>
               ))}
               {stats.totalRows > 2 && (
