@@ -293,8 +293,8 @@ function App() {
     setTimer(0);
     setProgress(0);
 
-    // Estimate: ~2000 QR/s on multi-core worker pool + 5s zip overhead
-    const est = Math.ceil(stats.totalRows / 2000) + 5;
+    // Estimate: ~100 records per second + 2s buffer (Improved from 40)
+    const est = Math.ceil(stats.totalRows / 100) + 2;
     setCountdown(est);
 
     const startTime = Date.now();
@@ -319,11 +319,7 @@ function App() {
     if (logoFile) formData.append('logo', logoFile);
 
     try {
-      // Timeout: allow up to 30 min for very large batches (50k+ records)
-      const response = await axios.post(`${API_URL}/generate`, formData, {
-        responseType: 'blob',
-        timeout: 30 * 60 * 1000,
-      });
+      const response = await axios.post(`${API_URL}/generate`, formData, { responseType: 'blob' });
       const blob = new Blob([response.data], { type: 'application/zip' });
       saveAs(blob, `qrcodes_${Date.now()}.zip`);
 
@@ -539,7 +535,7 @@ function App() {
             </div>
             {loading && (
               <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-light)', marginTop: '10px' }}>
-                ⚡ Multi-core processing — Est. {countdown > 0 ? `${countdown}s` : 'finishing...'} remaining. Do not close this tab.
+                Est. {countdown}s remaining. Do not close this tab.
               </p>
             )}
           </div>
