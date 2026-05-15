@@ -13,7 +13,8 @@ function App() {
   const [stats, setStats] = useState(null);
   const [config, setConfig] = useState({
     width: 300,
-    margin: 2,
+    marginX: 2,
+    marginY: 2,
     errorCorrectionLevel: 'H',
     colIndex: 0,
     format: 'png',
@@ -145,8 +146,10 @@ function App() {
           const qr = QRCode.create(text, { errorCorrectionLevel: config.errorCorrectionLevel });
           const { modules } = qr;
           const size = modules.size;
-          const margin = Number(config.margin);
-          const totalSize = size + (2 * margin);
+          const marginX = Number(config.marginX !== undefined ? config.marginX : 2);
+          const marginY = Number(config.marginY !== undefined ? config.marginY : 2);
+          const totalSizeX = size + (2 * marginX);
+          const totalSizeY = size + (2 * marginY);
           
           let shapes = '';
           const fill = config.colorDark;
@@ -155,11 +158,11 @@ function App() {
           const eyes = [{ r: 0, c: 0 }, { r: 0, c: size - 7 }, { r: size - 7, c: 0 }];
           for (const eye of eyes) {
             if (config.eyeStyle === 'rounded') {
-              shapes += `<rect x="${eye.c + margin + 0.5}" y="${eye.r + margin + 0.5}" width="6" height="6" rx="1.5" fill="none" stroke="${fill}" stroke-width="1" />`;
-              shapes += `<rect x="${eye.c + margin + 2}" y="${eye.r + margin + 2}" width="3" height="3" rx="0.5" fill="${fill}" />`;
+              shapes += `<rect x="${eye.c + marginX + 0.5}" y="${eye.r + marginY + 0.5}" width="6" height="6" rx="1.5" fill="none" stroke="${fill}" stroke-width="1" />`;
+              shapes += `<rect x="${eye.c + marginX + 2}" y="${eye.r + marginY + 2}" width="3" height="3" rx="0.5" fill="${fill}" />`;
             } else {
-              shapes += `<rect x="${eye.c + margin + 0.5}" y="${eye.r + margin + 0.5}" width="6" height="6" fill="none" stroke="${fill}" stroke-width="1" />`;
-              shapes += `<rect x="${eye.c + margin + 2}" y="${eye.r + margin + 2}" width="3" height="3" fill="${fill}" />`;
+              shapes += `<rect x="${eye.c + marginX + 0.5}" y="${eye.r + marginY + 0.5}" width="6" height="6" fill="none" stroke="${fill}" stroke-width="1" />`;
+              shapes += `<rect x="${eye.c + marginX + 2}" y="${eye.r + marginY + 2}" width="3" height="3" fill="${fill}" />`;
             }
           }
 
@@ -167,46 +170,48 @@ function App() {
             for (let c = 0; c < size; c++) {
               if (isFinder(r, c)) continue;
               if (modules.get(r, c)) {
-                if (config.moduleStyle === 'dots') shapes += `<circle cx="${c + margin + 0.5}" cy="${r + margin + 0.5}" r="0.4" fill="${fill}" />`;
-                else if (config.moduleStyle === 'rounded') shapes += `<rect x="${c + margin + 0.1}" y="${r + margin + 0.1}" width="0.8" height="0.8" rx="0.2" fill="${fill}" />`;
-                else shapes += `<rect x="${c + margin}" y="${r + margin}" width="1" height="1" fill="${fill}" />`;
+                if (config.moduleStyle === 'dots') shapes += `<circle cx="${c + marginX + 0.5}" cy="${r + marginY + 0.5}" r="0.4" fill="${fill}" />`;
+                else if (config.moduleStyle === 'rounded') shapes += `<rect x="${c + marginX + 0.1}" y="${r + marginY + 0.1}" width="0.8" height="0.8" rx="0.2" fill="${fill}" />`;
+                else shapes += `<rect x="${c + marginX}" y="${r + marginY}" width="1" height="1" fill="${fill}" />`;
               }
             }
           }
 
           const qrWidth = config.width || 300;
           const fontSize = config.textFontSize || 16;
-          const unitRatio = totalSize / qrWidth;
+          const unitRatio = totalSizeX / qrWidth;
           const textHeight = Math.max(Math.floor(qrWidth * 0.15), Math.floor(fontSize * 2.5));
           const textSpaceInt = Number(config.textSpace || 0);
           const textSpaceUnits = textSpaceInt * unitRatio;
           const textHeightUnits = (textHeight * unitRatio) + textSpaceUnits;
-          const totalHeightUnits = config.showText ? totalSize + textHeightUnits : totalSize;
+          const totalHeightUnits = config.showText ? totalSizeY + textHeightUnits : totalSizeY;
           
           let extraElements = '';
           if (logoPreview) {
             const lSizeUnits = (config.logoSize / 100) * size;
-            const lPos = margin + (size - lSizeUnits) / 2;
-            extraElements += `<rect x="${lPos - 0.2}" y="${lPos - 0.2}" width="${lSizeUnits + 0.4}" height="${lSizeUnits + 0.4}" fill="${config.colorLight}" />`;
-            extraElements += `<image x="${lPos}" y="${lPos}" width="${lSizeUnits}" height="${lSizeUnits}" href="${logoPreview}" />`;
+            const lPosX = marginX + (size - lSizeUnits) / 2;
+            const lPosY = marginY + (size - lSizeUnits) / 2;
+            extraElements += `<rect x="${lPosX - 0.2}" y="${lPosY - 0.2}" width="${lSizeUnits + 0.4}" height="${lSizeUnits + 0.4}" fill="${config.colorLight}" />`;
+            extraElements += `<image x="${lPosX}" y="${lPosY}" width="${lSizeUnits}" height="${lSizeUnits}" href="${logoPreview}" />`;
           }
 
           if (config.showText) {
             const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            const textYUnits = totalSize + textSpaceUnits + ((textHeightUnits - Math.max(0, textSpaceUnits)) / 2);
+            const textYUnits = totalSizeY + textSpaceUnits + ((textHeightUnits - Math.max(0, textSpaceUnits)) / 2);
             const fontSizeUnits = fontSize * unitRatio;
             
-            const textXPos = (totalSize / 2) + ((config.textX || 0) * unitRatio);
+            const textXPos = (totalSizeX / 2) + ((config.textX || 0) * unitRatio);
             
             extraElements += `<text x="${textXPos}" y="${textYUnits}" font-family="Arial, Helvetica, sans-serif" font-size="${fontSizeUnits}" fill="${config.colorDark}" text-anchor="middle" dominant-baseline="middle" font-weight="bold">${escaped}</text>`;
           }
 
-          const userDefinedHeight = config.showText ? qrWidth + textHeight + textSpaceInt : qrWidth;
+          const qrBaseHeight = Math.round(totalSizeY / unitRatio);
+          const userDefinedHeight = config.showText ? qrBaseHeight + textHeight + textSpaceInt : qrBaseHeight;
           const previewWidth = 180;
           const previewHeight = previewWidth * (userDefinedHeight / qrWidth);
 
           const bgFill = config.format === 'png' ? 'transparent' : config.colorLight;
-          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalHeightUnits}" width="${qrWidth}" height="${userDefinedHeight}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="${bgFill}"/>${shapes}${extraElements}</svg>`;
+          const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSizeX} ${totalHeightUnits}" width="${qrWidth}" height="${userDefinedHeight}" shape-rendering="crispEdges"><rect width="100%" height="100%" fill="${bgFill}"/>${shapes}${extraElements}</svg>`;
           
           await new Promise((resolve) => {
             const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
@@ -288,8 +293,8 @@ function App() {
     setTimer(0);
     setProgress(0);
 
-    // Estimate: ~100 records per second + 2s buffer (Improved from 40)
-    const est = Math.ceil(stats.totalRows / 100) + 2;
+    // Estimate: ~2000 QR/s on multi-core worker pool + 5s zip overhead
+    const est = Math.ceil(stats.totalRows / 2000) + 5;
     setCountdown(est);
 
     const startTime = Date.now();
@@ -297,7 +302,8 @@ function App() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('width', config.width);
-    formData.append('margin', config.margin);
+    formData.append('marginX', config.marginX !== undefined ? config.marginX : 2);
+    formData.append('marginY', config.marginY !== undefined ? config.marginY : 2);
     formData.append('errorCorrectionLevel', config.errorCorrectionLevel);
     formData.append('colIndex', config.colIndex);
     formData.append('format', config.format);
@@ -313,7 +319,11 @@ function App() {
     if (logoFile) formData.append('logo', logoFile);
 
     try {
-      const response = await axios.post(`${API_URL}/generate`, formData, { responseType: 'blob' });
+      // Timeout: allow up to 30 min for very large batches (50k+ records)
+      const response = await axios.post(`${API_URL}/generate`, formData, {
+        responseType: 'blob',
+        timeout: 30 * 60 * 1000,
+      });
       const blob = new Blob([response.data], { type: 'application/zip' });
       saveAs(blob, `qrcodes_${Date.now()}.zip`);
 
@@ -430,9 +440,15 @@ function App() {
                     <input type="color" value={config.colorLight} onChange={(e) => setConfig({ ...config, colorLight: e.target.value })} style={{ width: '100%', height: '40px', padding: '0', cursor: 'pointer' }} />
                   )}
                 </div>
-                <div className="form-group">
-                  <label>Margin / Quiet Zone ({config.margin} blocks)</label>
-                  <input type="range" min="0" max="10" value={config.margin} onChange={(e) => setConfig({ ...config, margin: Number(e.target.value) })} />
+                <div className="form-group" style={{ display: 'flex', gap: '10px' }}>
+                  <div style={{ flex: 1 }}>
+                    <label>Margin X/↔ ({config.marginX !== undefined ? config.marginX : 2})</label>
+                    <input type="range" min="0" max="10" value={config.marginX !== undefined ? config.marginX : 2} onChange={(e) => setConfig({ ...config, marginX: Number(e.target.value) })} style={{ width: '100%' }} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label>Margin Y/↕ ({config.marginY !== undefined ? config.marginY : 2})</label>
+                    <input type="range" min="0" max="10" value={config.marginY !== undefined ? config.marginY : 2} onChange={(e) => setConfig({ ...config, marginY: Number(e.target.value) })} style={{ width: '100%' }} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -523,7 +539,7 @@ function App() {
             </div>
             {loading && (
               <p style={{ textAlign: 'center', fontSize: '12px', color: 'var(--text-light)', marginTop: '10px' }}>
-                Est. {countdown}s remaining. Do not close this tab.
+                ⚡ Multi-core processing — Est. {countdown > 0 ? `${countdown}s` : 'finishing...'} remaining. Do not close this tab.
               </p>
             )}
           </div>
